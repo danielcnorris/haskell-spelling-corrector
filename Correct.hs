@@ -106,7 +106,8 @@ correct ws w =  snd .
                 [ known ws . return
                 , known ws . edits 1
                 , known ws . edits 2
-                , return]
+                , return
+                ]
 
 ------------------
 -- Main program --
