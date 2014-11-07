@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-
 -- Check.hs
 -- A simple spelling corrector, based off of
 -- http://norvig.com/spell-correct.html
@@ -9,47 +8,49 @@ import           Control.Monad            (forever, (>=>))
 import qualified Data.Array.Unboxed       as AU
 import           Data.ByteString          (ByteString)
 import qualified Data.ByteString          as B
+import qualified Data.ByteString.Char8    as C
 import qualified Data.ByteString.Internal as BI
 import           Data.Char                (toLower)
-import           Data.List                (foldl', inits, nub, tails)
+import           Data.List                (foldl', nub)
 import qualified Data.Map.Strict          as Map
 import           Data.Word                (Word8)
 import qualified Data.Word                as W
-import           System.IO                (readFile)
 import           Text.Regex.Posix         ((=~))
 
--- Helper
+-------------------------------------
+-- Helper functions for ByteString --
+-------------------------------------
 toLowerW8 :: AU.UArray W.Word8 W.Word8
 toLowerW8 = AU.listArray (0,255)  (map (BI.c2w . toLower) ['\0'..'\255'])
 
 lowercase :: ByteString -> ByteString
 lowercase = B.map (\x -> toLowerW8 AU.! x)
 
+
 ----------------------------------------
 -- Funciton to load the training data --
 ----------------------------------------
--- Use bytestrings?
 type Words = Map.Map ByteString Int
 
 parse :: ByteString -> [ByteString]
-parse = map lowercase . concat . (flip (=~) ("[a-zA-Z]+" :: ByteString))
+parse = map lowercase . concat . flip (=~) ("[a-zA-Z]+" :: ByteString)
 
 train :: [ByteString] -> Words
 train = foldl' (\m w -> Map.insertWith (+) w 1 m) Map.empty
 
+
 ---------------------------------------------
 -- Functions for collecting possible edits --
 ---------------------------------------------
--- Fix later
 letters :: [Word8]
 letters = map (BI.c2w . toLower) ['\0'..'\255']
 
 splits ::  ByteString -> [(ByteString, ByteString)]
-splits w = map (flip B.splitAt w) [0..B.length w]
+splits w = map (`B.splitAt` w) [0..B.length w]
 
 -- Don't include whole word
 splits' :: ByteString -> [(ByteString, ByteString)]
-splits' w = map (flip B.splitAt w) [1..B.length w - 1]
+splits' w = map (`B.splitAt` w) [1..B.length w - 1]
 
 deletes :: ByteString -> [ByteString]
 deletes w = if B.null w
@@ -71,7 +72,7 @@ replaces w = if B.null w
                                letters >>= \letter ->
                                let second' = B.cons letter (B.tail second) in
                                return $ B.concat [first, second']
-                      in filter ((/=) w) strs
+                      in filter (w /=) strs
 
 transposes :: ByteString -> [ByteString]
 transposes w = if B.length w <= 1
@@ -85,24 +86,20 @@ transposes w = if B.length w <= 1
                                          ]
 
 known :: Words -> [ByteString] -> [ByteString]
-known ws = filter (flip Map.member ws)
+known ws = filter (`Map.member` ws)
 
--- Any way to do point free?
 edits :: Int -> ByteString -> [ByteString]
 edits n = foldl' (>=>) return (replicate n edits')
-    where edits' w = nub $ [deletes, inserts, replaces, transposes] >>=
-                     ($ w)
+    where edits' w = nub $ [deletes, inserts, replaces, transposes] >>= ($ w)
 
 
 ---------------------------------------
 -- Main spelling suggestion function --
 ---------------------------------------
--- Take lower case of word?
--- Enforce just one word at a time?
 correct :: Words -> ByteString -> ByteString
 correct ws w =  snd .
                 maximum .
-                map ((flip (Map.findWithDefault 1) ws)  &&& id).
+                map (flip (Map.findWithDefault 1) ws  &&& id).
                 head .
                 filter (not . null) .
                 map ($ w) $
@@ -111,20 +108,21 @@ correct ws w =  snd .
                 , known ws . edits 2
                 , return]
 
----------------------
--- Main executable --
----------------------
+------------------
+-- Main program --
+------------------
 main :: IO ()
 main = do
+    putStrLn "Loading training data..."
     contents <- B.readFile "big.txt"
-    let parsed = parse contents
-    print $ length parsed
-    print "That's a big file"
-    let words = train parsed
-    print $ Map.size words
-    print "That's a big dictionary"
-{--
-main = readFile "big.txt" >>= \contents ->
-       forever $ getLine >>=
-                 putStrLn . correct (train . parse $ contents)
---}
+    let words = train . parse $ contents
+    putStrLn $ show (Map.size words) ++ " words indexed."
+    forever $ do
+        putStrLn "Enter a word: "
+        word <- B.getLine
+        if B.length word > 1 || lowercase word /= word
+            then putStrLn "Must enter just one lower case word!"
+            else let corrected = correct words word in
+                 if corrected == word
+                     then putStrLn "Your word was spelled correctly"
+                     else C.putStrLn $ B.concat ["Did you mean: ", corrected]
