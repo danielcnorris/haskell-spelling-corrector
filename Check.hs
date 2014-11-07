@@ -1,71 +1,94 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- Check.hs
 -- A simple spelling corrector, based off of
 -- http://norvig.com/spell-correct.html
 
-import           Control.Arrow    ((&&&))
-import           Control.Monad    (forever, (>=>))
-import           Data.Char        (toLower)
-import           Data.List        (foldl', inits, nub, tails)
-import qualified Data.Map.Strict  as Map
-import           System.IO        (readFile)
-import           Text.Regex.Posix ((=~))
+import           Control.Arrow            ((&&&))
+import           Control.Monad            (forever, (>=>))
+import qualified Data.Array.Unboxed       as AU
+import           Data.ByteString          (ByteString)
+import qualified Data.ByteString          as B
+import qualified Data.ByteString.Internal as BI
+import           Data.Char                (toLower)
+import           Data.List                (foldl', inits, nub, tails)
+import qualified Data.Map.Strict          as Map
+import           Data.Word                (Word8)
+import qualified Data.Word                as W
+import           System.IO                (readFile)
+import           Text.Regex.Posix         ((=~))
 
+-- Helper
+toLowerW8 :: AU.UArray W.Word8 W.Word8
+toLowerW8 = AU.listArray (0,255)  (map (BI.c2w . toLower) ['\0'..'\255'])
+
+lowercase :: ByteString -> ByteString
+lowercase = B.map (\x -> toLowerW8 AU.! x)
 
 ----------------------------------------
 -- Funciton to load the training data --
 ----------------------------------------
 -- Use bytestrings?
-type Words = Map.Map String Int
+type Words = Map.Map ByteString Int
 
-parse :: String -> [String]
-parse = map (map toLower) . concat . (flip (=~) "[a-zA-Z]+")
+parse :: ByteString -> [ByteString]
+parse = map lowercase . concat . (flip (=~) ("[a-zA-Z]+" :: ByteString))
 
-train :: [String] -> Words
+train :: [ByteString] -> Words
 train = foldl' (\m w -> Map.insertWith (+) w 1 m) Map.empty
-
 
 ---------------------------------------------
 -- Functions for collecting possible edits --
 ---------------------------------------------
-letters :: [Char]
-letters = ['a'..'z']
+-- Fix later
+letters :: [Word8]
+letters = map (BI.c2w . toLower) ['\0'..'\255']
 
-splits :: String -> [(String, String)]
-splits w = map (flip splitAt w) [0..length w]
+splits ::  ByteString -> [(ByteString, ByteString)]
+splits w = map (flip B.splitAt w) [0..B.length w]
 
 -- Don't include whole word
-splits' :: String -> [(String, String)]
-splits' w = map (flip splitAt w) [1..length w - 1]
+splits' :: ByteString -> [(ByteString, ByteString)]
+splits' w = map (flip B.splitAt w) [1..B.length w - 1]
 
-deletes :: String -> [String]
-deletes [] = []
-deletes w = splits' w >>= \(first, _:cs) -> return $ first ++ cs
+deletes :: ByteString -> [ByteString]
+deletes w = if B.null w
+                then []
+                else splits' w >>= \(first, second) ->
+                     return $ B.concat [first, B.tail second]
 
-inserts :: String -> [String]
+inserts :: ByteString -> [ByteString]
 inserts w = splits w >>= \(first, second) ->
             letters >>= \letter ->
-            return $ first ++ letter:second
+            return $ B.concat [first, B.cons letter second]
 
-replaces :: String -> [String]
-replaces [] = []
-replaces w = let strs = if length w == 1
-                            then map return letters
-                            else splits' w >>= \(first, _:cs) ->
-                                 letters >>= \letter ->
-                                 return $ first ++ letter:cs
-             in filter ((/=) w) strs
+replaces :: ByteString -> [ByteString]
+replaces w = if B.null w
+                 then []
+                 else let strs = if B.length w == 1
+                          then return $ B.pack letters
+                          else splits' w >>= \(first, second) ->
+                               letters >>= \letter ->
+                               let second' = B.cons letter (B.tail second) in
+                               return $ B.concat [first, second']
+                      in filter ((/=) w) strs
 
-transposes :: String -> [String]
-transposes w = if length w <= 1
+transposes :: ByteString -> [ByteString]
+transposes w = if B.length w <= 1
                   then []
-                  else splits' w >>= \(first, c:cs) ->
-                       return $ init first ++ [c, last first] ++ cs
+                  else splits' w >>= \(first, second) ->
+                       return $ B.concat [ B.init first
+                                         ,  B.pack [ B.head second
+                                                   , B.last first
+                                                   ]
+                                         , B.tail second
+                                         ]
 
-known :: Words -> [String] -> [String]
+known :: Words -> [ByteString] -> [ByteString]
 known ws = filter (flip Map.member ws)
 
 -- Any way to do point free?
-edits :: Int -> String -> [String]
+edits :: Int -> ByteString -> [ByteString]
 edits n = foldl' (>=>) return (replicate n edits')
     where edits' w = nub $ [deletes, inserts, replaces, transposes] >>=
                      ($ w)
@@ -76,7 +99,7 @@ edits n = foldl' (>=>) return (replicate n edits')
 ---------------------------------------
 -- Take lower case of word?
 -- Enforce just one word at a time?
-correct :: Words -> String -> String
+correct :: Words -> ByteString -> ByteString
 correct ws w =  snd .
                 maximum .
                 map ((flip (Map.findWithDefault 1) ws)  &&& id).
@@ -93,7 +116,7 @@ correct ws w =  snd .
 ---------------------
 main :: IO ()
 main = do
-    contents <- readFile "big.txt"
+    contents <- B.readFile "big.txt"
     let parsed = parse contents
     print $ length parsed
     print "That's a big file"
