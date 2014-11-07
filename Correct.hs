@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
--- Check.hs
+-- Correct.hs
 -- A simple spelling corrector, based off of
 -- http://norvig.com/spell-correct.html
 
