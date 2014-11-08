@@ -4,14 +4,14 @@
 -- http://norvig.com/spell-correct.html
 
 import           Control.Arrow            ((&&&))
-import           Control.Monad            (forever, (>=>))
+import           Control.Monad            (forever, (<=<))
 import qualified Data.Array.Unboxed       as AU
 import           Data.ByteString          (ByteString)
 import qualified Data.ByteString          as B
 import qualified Data.ByteString.Char8    as C
 import qualified Data.ByteString.Internal as BI
 import           Data.Char                (toLower)
-import           Data.List                (foldl', nub)
+import           Data.List                (nub)
 import qualified Data.Map.Strict          as Map
 import           Data.Word                (Word8)
 import qualified Data.Word                as W
@@ -36,7 +36,7 @@ parse :: ByteString -> [ByteString]
 parse = map lowercase . concat . flip (=~) ("[a-zA-Z]+" :: ByteString)
 
 train :: [ByteString] -> Words
-train = foldl' (\m w -> Map.insertWith (+) w 1 m) Map.empty
+train = foldr (\w m -> Map.insertWith (+) w 1 m) Map.empty
 
 
 ---------------------------------------------
@@ -89,7 +89,7 @@ known :: Words -> [ByteString] -> [ByteString]
 known ws = filter (`Map.member` ws)
 
 edits :: Int -> ByteString -> [ByteString]
-edits n = foldl' (>=>) return (replicate n edits')
+edits n = foldr (<=<) return (replicate n edits')
     where edits' w = nub $ [deletes, inserts, replaces, transposes] >>= ($ w)
 
 
@@ -99,7 +99,7 @@ edits n = foldl' (>=>) return (replicate n edits')
 correct :: Words -> ByteString -> ByteString
 correct ws w =  snd .
                 maximum .
-                map (flip (Map.findWithDefault 1) ws  &&& id).
+                map (flip (Map.findWithDefault 1) ws  &&& id) .
                 head .
                 filter (not . null) .
                 map ($ w) $
@@ -116,14 +116,14 @@ main :: IO ()
 main = do
     putStrLn "Loading training data..."
     contents <- B.readFile "big.txt"
-    let words = train . parse $ contents
-    putStrLn $ show (Map.size words) ++ " words indexed."
+    let trained = train . parse $ contents
+    putStrLn $ show (Map.size trained) ++ " words indexed."
     forever $ do
         putStrLn "Enter a word: "
         word <- B.getLine
         if B.length word > 1 || lowercase word /= word
             then putStrLn "Must enter just one lower case word!"
-            else let corrected = correct words word in
+            else let corrected = correct trained word in
                  if corrected == word
                      then putStrLn "Your word was spelled correctly"
                      else C.putStrLn $ B.concat ["Did you mean: ", corrected]
