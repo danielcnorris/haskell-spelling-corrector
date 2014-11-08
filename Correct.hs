@@ -113,17 +113,17 @@ correct ws w =  snd .
 -- Main program --
 ------------------
 main :: IO ()
-main = do
-    putStrLn "Loading training data..."
-    contents <- B.readFile "big.txt"
-    let trained = train . parse $ contents
-    putStrLn $ show (Map.size trained) ++ " words indexed."
-    forever $ do
-        putStrLn "Enter a word: "
-        word <- B.getLine
-        if B.length word > 1 || lowercase word /= word
-            then putStrLn "Must enter just one lower case word!"
-            else let corrected = correct trained word in
-                 if corrected == word
-                     then putStrLn "Your word was spelled correctly"
-                     else C.putStrLn $ B.concat ["Did you mean: ", corrected]
+main = putStrLn "Loading training data..." >>
+       B.readFile "big.txt" >>= \contents ->
+       let trained = train . parse $ contents in
+       putStrLn (show (Map.size trained) ++ " words indexed.") >>
+       forever (putStrLn "Enter a word: " >> 
+                B.getLine >>= \word ->
+                if length (C.words word) > 1 || lowercase word /= word
+                    then putStrLn "Must enter just one lowercase word!"
+                    else let corrected = correct trained word in
+                        if corrected == word
+                            then putStrLn "Your word was spelled correctly"
+                            else C.putStrLn $ B.concat ["Did you mean \""
+                                                       , corrected
+                                                       , "\"?"])
