@@ -1,7 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
--- Correct.hs
+
+-------------------------------------------------------------------------------
+-- | 
+-- Module      : Correct.hs
+-- Note        : 
+-- 
 -- A simple spelling corrector, based off of
 -- http://norvig.com/spell-correct.html
+-------------------------------------------------------------------------------
 
 import           Control.Arrow            ((&&&))
 import           Control.Monad            (forever, (<=<))
@@ -17,9 +23,8 @@ import           Data.Word                (Word8)
 import qualified Data.Word                as W
 import           Text.Regex.Posix         ((=~))
 
--------------------------------------
--- Helper functions for ByteString --
--------------------------------------
+-------------------------------------------------------------------------------
+--  Helper functions for ByteString
 toLowerW8 :: AU.UArray W.Word8 W.Word8
 toLowerW8 = AU.listArray (0,255)  (map (BI.c2w . toLower) ['\0'..'\255'])
 
@@ -27,9 +32,8 @@ lowercase :: ByteString -> ByteString
 lowercase = B.map (\x -> toLowerW8 AU.! x)
 
 
-----------------------------------------
--- Funciton to load the training data --
-----------------------------------------
+-------------------------------------------------------------------------------
+--  Functions to load the training data
 type Words = Map.Map ByteString Int
 
 parse :: ByteString -> [ByteString]
@@ -39,9 +43,8 @@ train :: [ByteString] -> Words
 train = foldr (\w m -> Map.insertWith (+) w 1 m) Map.empty
 
 
----------------------------------------------
--- Functions for collecting possible edits --
----------------------------------------------
+-------------------------------------------------------------------------------
+--  Functions for collecting possible edits
 letters :: [Word8]
 letters = map (BI.c2w . toLower) ['\0'..'\255']
 
@@ -93,9 +96,8 @@ edits n = foldr (<=<) return (replicate n edits')
     where edits' w = nub $ [deletes, inserts, replaces, transposes] >>= ($ w)
 
 
----------------------------------------
--- Main spelling suggestion function --
----------------------------------------
+-------------------------------------------------------------------------------
+--  Main spelling suggestion function
 correct :: Words -> ByteString -> ByteString
 correct ws w =  snd .
                 maximum .
@@ -109,9 +111,9 @@ correct ws w =  snd .
                 , return
                 ]
 
-------------------
--- Main program --
-------------------
+
+-------------------------------------------------------------------------------
+--  Main program
 main :: IO ()
 main = putStrLn "Loading training data..." >>
        B.readFile "big.txt" >>= \contents ->
