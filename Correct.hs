@@ -10,15 +10,16 @@
 -------------------------------------------------------------------------------
 
 import           Control.Arrow            ((&&&))
-import           Control.Monad            (forever, (<=<))
+import           Control.Monad            (forever)
 import qualified Data.Array.Unboxed       as AU
 import           Data.ByteString          (ByteString)
 import qualified Data.ByteString          as B
 import qualified Data.ByteString.Char8    as C
 import qualified Data.ByteString.Internal as BI
 import           Data.Char                (toLower)
-import           Data.List                (nub)
+import           Data.List                (foldl')
 import qualified Data.Map.Strict          as Map
+import qualified Data.Set                 as Set
 import           Data.Word                (Word8)
 import qualified Data.Word                as W
 import           Text.Regex.Posix         ((=~))
@@ -40,7 +41,7 @@ parse :: ByteString -> [ByteString]
 parse = map lowercase . concat . flip (=~) ("[a-zA-Z]+" :: ByteString)
 
 train :: [ByteString] -> Words
-train = foldr (\w m -> Map.insertWith (+) w 1 m) Map.empty
+train = foldl' (\m w -> Map.insertWith (+) w 1 m) Map.empty
 
 
 -------------------------------------------------------------------------------
@@ -88,27 +89,31 @@ transposes w = if B.length w <= 1
                                          , B.tail second
                                          ]
 
-known :: Words -> [ByteString] -> [ByteString]
-known ws = filter (`Map.member` ws)
+known :: Words -> Set.Set ByteString -> Set.Set ByteString
+known ws = Set.filter (`Map.member` ws)
 
-edits :: Int -> ByteString -> [ByteString]
-edits n = foldr (<=<) return (replicate n edits')
-    where edits' w = nub $ [deletes, inserts, replaces, transposes] >>= ($ w)
+edits1 :: ByteString -> Set.Set ByteString
+edits1 w = foldl' (\acc f -> Set.union (foldl' (flip Set.insert) Set.empty
+                   (f w)) acc)
+               Set.empty [deletes, inserts, replaces, transposes]
 
+knownEdits2 :: Words -> ByteString -> Set.Set ByteString
+knownEdits2 ws w = Set.fold (\x acc -> Set.union acc (known ws . edits1 $ x))
+                       Set.empty (edits1 w)
 
 -------------------------------------------------------------------------------
 --  Main spelling suggestion function
 correct :: Words -> ByteString -> ByteString
 correct ws w =  snd .
-                maximum .
-                map (flip (Map.findWithDefault 1) ws  &&& id) .
+                Set.findMax .
+                Set.map (flip (Map.findWithDefault 1) ws  &&& id) .
                 head .
-                filter (not . null) .
+                filter (not . Set.null) .
                 map ($ w) $
-                [ known ws . return
-                , known ws . edits 1
-                , known ws . edits 2
-                , return
+                [ known ws . Set.singleton
+                , known ws . edits1
+                , knownEdits2 ws
+                , Set.singleton
                 ]
 
 
