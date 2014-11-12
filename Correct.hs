@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -------------------------------------------------------------------------------
--- | 
+-- |
 -- Module      : Correct.hs
--- Note        : 
--- 
+-- Note        :
+--
 -- A simple spelling corrector, based off of
 -- http://norvig.com/spell-correct.html
 -------------------------------------------------------------------------------
@@ -46,7 +46,7 @@ train = foldr (\w m -> Map.insertWith (+) w 1 m) Map.empty
 -------------------------------------------------------------------------------
 --  Functions for collecting possible edits
 letters :: [Word8]
-letters = map (BI.c2w . toLower) ['\0'..'\255']
+letters = map (BI.c2w . toLower) (['\65'..'\90'] ++ ['\97'..'\122'])
 
 splits ::  ByteString -> [(ByteString, ByteString)]
 splits w = map (`B.splitAt` w) [0..B.length w]
@@ -119,7 +119,7 @@ main = putStrLn "Loading training data..." >>
        B.readFile "big.txt" >>= \contents ->
        let trained = train . parse $ contents in
        putStrLn (show (Map.size trained) ++ " words indexed.") >>
-       forever (putStrLn "Enter a word: " >> 
+       forever (putStrLn "Enter a word: " >>
                 B.getLine >>= \word ->
                 if length (C.words word) > 1 || lowercase word /= word
                     then putStrLn "Must enter just one lowercase word!"
