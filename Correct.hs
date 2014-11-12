@@ -20,6 +20,8 @@ import           Data.Char                (toLower)
 import           Data.List                (foldl')
 import qualified Data.Map.Strict          as Map
 import qualified Data.Set                 as Set
+import qualified Data.Trie                as Trie
+import           Data.Trie.Convenience    (insertWith, lookupWithDefault)
 import           Data.Word                (Word8)
 import qualified Data.Word                as W
 import           Text.Regex.Posix         ((=~))
@@ -35,13 +37,13 @@ lowercase = B.map (\x -> toLowerW8 AU.! x)
 
 -------------------------------------------------------------------------------
 --  Functions to load the training data
-type Words = Map.Map ByteString Int
+type Words = Trie.Trie Int
 
 parse :: ByteString -> [ByteString]
 parse = map lowercase . concat . flip (=~) ("[a-zA-Z]+" :: ByteString)
 
 train :: [ByteString] -> Words
-train = foldl' (\m w -> Map.insertWith (+) w 1 m) Map.empty
+train = foldl' (\t w -> insertWith (+) w 1 t) Trie.empty
 
 
 -------------------------------------------------------------------------------
@@ -90,7 +92,7 @@ transposes w = if B.length w <= 1
                                          ]
 
 known :: Words -> Set.Set ByteString -> Set.Set ByteString
-known ws = Set.filter (`Map.member` ws)
+known ws = Set.filter (`Trie.member` ws)
 
 edits1 :: ByteString -> Set.Set ByteString
 edits1 w = foldl' (\acc f -> Set.union (foldl' (flip Set.insert) Set.empty
@@ -106,7 +108,7 @@ knownEdits2 ws w = Set.fold (\x acc -> Set.union acc (known ws . edits1 $ x))
 correct :: Words -> ByteString -> ByteString
 correct ws w =  snd .
                 Set.findMax .
-                Set.map (flip (Map.findWithDefault 1) ws  &&& id) .
+                Set.map (flip (lookupWithDefault 1) ws  &&& id) .
                 head .
                 filter (not . Set.null) .
                 map ($ w) $
@@ -123,7 +125,7 @@ main :: IO ()
 main = putStrLn "Loading training data..." >>
        B.readFile "big.txt" >>= \contents ->
        let trained = train . parse $ contents in
-       putStrLn (show (Map.size trained) ++ " words indexed.") >>
+       putStrLn (show (Trie.size trained) ++ " words indexed.") >>
        forever (putStrLn "Enter a word: " >>
                 B.getLine >>= \word ->
                 if length (C.words word) > 1 || lowercase word /= word
