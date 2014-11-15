@@ -2,7 +2,7 @@
 
 -------------------------------------------------------------------------------
 -- |
--- Module      : Correct.hs
+-- Module      : Correct.Core.hs
 -- Note        :
 --
 -- A simple spelling corrector, based off of
@@ -39,7 +39,6 @@ toLowerW8 = AU.listArray (0,255)  (map (BI.c2w . toLower) ['\0'..'\255'])
 lowercase :: ByteString -> ByteString
 lowercase = B.map (\x -> toLowerW8 AU.! x)
 
-
 -------------------------------------------------------------------------------
 --  Functions to load the training data
 type Words = Trie.Trie Int
@@ -49,7 +48,6 @@ parse = map lowercase . concat . flip (=~) ("[a-zA-Z]+" :: ByteString)
 
 train :: [ByteString] -> Words
 train = foldl' (\t w -> insertWith (+) w 1 t) Trie.empty
-
 
 -------------------------------------------------------------------------------
 --  Functions for collecting possible edits
